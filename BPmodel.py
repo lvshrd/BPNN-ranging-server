@@ -101,7 +101,7 @@ if __name__ == "__main__":
     # 数据路径
     data_path_base = 'D:/311/FYP/my_project/Linear Regression/data_env_'
     envs = [0, 1, 2, 3]  # 设置环境数量
-    model_path_base = 'D:/311/FYP/my_project/Linear Regression/'
+    model_path_base = 'D:/311/FYP/my_project/Linear Regression/model/'
     
     # 保存模型
     for env in envs:
