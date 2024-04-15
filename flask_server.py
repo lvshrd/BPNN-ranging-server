@@ -21,7 +21,7 @@ mutation_detection_window = 10
 env_model_index = 1 
 
 # 加载预训练模型
-model_path_base = 'D:/311/FYP/my_project/Linear Regression/model/'
+model_path_base = 'model/'
 envs = [0, 1, 2, 3]  # 设置环境数量
 models = {}
 for env in envs:
