@@ -9,18 +9,20 @@ import logging
 logging.basicConfig(filename='flask_server.log', level=logging.INFO)
 
 app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
 
 # 初始化突变检测相关变量
 prev_rssi = {}
 prev_env = {}
 # 定义突变检测阈值
-mutation_threshold = 7  
+mutation_threshold = 2  
 history_max_length = 200
-mutation_detection_window = 5
+mutation_detection_window = 10
 # 获取环境模型，默认使用model_env1
 env_model_index = 1 
 
 # 加载预训练模型
+# model_path_base = '/home/lvshrd/LinearRegression/model/'
 model_path_base = 'model/'
 envs = [0, 1, 2, 3]  # 设置环境数量
 models = {}
@@ -41,8 +43,14 @@ print(f"Total models loaded: {len(models)}")
 
 # RSSI突变检测函数
 def detect_rssi_mutation(rssi):
-    rssi_array = np.array(rssi)
-    return np.var(rssi_array) > mutation_threshold
+    first_half_avg = np.mean(rssi[:mutation_detection_window // 2])
+    final_half_avg = np.mean(rssi[mutation_detection_window // 2:])
+    if first_half_avg - final_half_avg> mutation_threshold:
+        return -1   #代表隔墙遮挡
+    elif first_half_avg - final_half_avg < -mutation_threshold:
+        return 1    #代表空旷场景
+    else:
+        return 0
     
 # 处理数据并进行预测的函数
 def process_data_and_predict(name, rssi):
@@ -71,10 +79,13 @@ def process_data_and_predict(name, rssi):
         if len(rssi) >= mutation_detection_window:
             # 检查RSSI突变情况
             mutation_detected = detect_rssi_mutation(rssi[-mutation_detection_window:])
-            if mutation_detected:
+            if mutation_detected == 1:
                 # RSSI突变情况，根据情况选择不同的模型进行预测
-                prev_env[name] = 0 if rssi[-2]+ rssi[-1]  > rssi[-5]+ rssi[-4]  else 1
-                print(f"Model Change:{prev_env[name]}")
+                prev_env[name] = 1
+                logging.info(f"{name}'s Model Change:{prev_env[name]}")
+            elif mutation_detected == -1:
+                prev_env[name] = 0
+                logging.info(f"{name}'s Model Change:{prev_env[name]}")           
 
         result['wallStatus'] = prev_env[name]
         result['distance'] = distance
@@ -115,8 +126,8 @@ def predict():
 
     # 处理数据并进行预测
     result = process_data_and_predict(name, prev_rssi[name])
-    print(result)
 
+    logging.info(f"Sent data: {result}")
     return result
 
 if __name__ == '__main__':
