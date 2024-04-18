@@ -4,26 +4,25 @@ from filterpy.kalman import KalmanFilter
 
 def clean_rssi_values(rssi_values_sample):
     rssi_list = rssi_values_sample.copy()
+    if len(rssi_list) >= 10:
+        # 一次性移除异常值
+        while True:
+            mean_rssi = np.mean(rssi_list)
+            max_rssi = max(rssi_list)
+            min_rssi = min(rssi_list)
 
-    # 一次性移除异常值
-    while True:
-        mean_rssi = np.mean(rssi_list)
-        max_rssi = max(rssi_list)
-        min_rssi = min(rssi_list)
-
-        # 记录要移除的异常值索引
-        indices_to_remove = []
-        for i, rssi in enumerate(rssi_list):
-            if (max_rssi - mean_rssi) / mean_rssi > 0.2 and rssi == max_rssi:
-                indices_to_remove.append(i)
-            elif (mean_rssi - min_rssi) / mean_rssi > 0.2 and rssi == min_rssi:
-                indices_to_remove.append(i)
-        # 移除异常值
-        if indices_to_remove:
-            rssi_list = [rssi for i, rssi in enumerate(rssi_list) if i not in indices_to_remove]
-        else:
-            break
-
+            # 记录要移除的异常值索引
+            indices_to_remove = []
+            for i, rssi in enumerate(rssi_list):
+                if (max_rssi - mean_rssi) / mean_rssi > 0.2 and rssi == max_rssi:
+                    indices_to_remove.append(i)
+                elif (mean_rssi - min_rssi) / mean_rssi > 0.2 and rssi == min_rssi:
+                    indices_to_remove.append(i)
+            # 移除异常值
+            if indices_to_remove:
+                rssi_list = [rssi for i, rssi in enumerate(rssi_list) if i not in indices_to_remove]
+            else:
+                break    
     return rssi_list
 
 
@@ -90,19 +89,22 @@ def alpha_beta_gama(z):
 def median_filter(data, window_size):
     return medfilt(data, kernel_size=window_size)
 
-def weighted_blend_filter(data, window_size, process_variance, measurement_variance, alpha_beta_gama_weight=0.25, moving_average_weight=0.25, kalman_weight=0.25, gaussian_weight=0.25):
+def weighted_blend_filter(data, window_size, process_variance, measurement_variance, average_weight= 0.2, median_weight=0.05,kalman_weight=0.5, gaussian_weight=0.25):
     # Apply each filter
-    alpha_beta_gama_output = alpha_beta_gama(data)
-    moving_average_output = moving_average_filter(data, window_size)
-    kalman_output = kalman_filter(data, process_variance, measurement_variance)
-    gaussian_output = gaussian_filter(data, window_size)
-    # Apply weights and blend the filtered outputs
-    blended_output = []
-    for i in range(len(data)):
-        blended_value = (alpha_beta_gama_output[i] * alpha_beta_gama_weight + 
-                         moving_average_output[i] * moving_average_weight + 
-                         kalman_output[i] * kalman_weight + 
-                         gaussian_output[i] * gaussian_weight)
-        blended_output.append(blended_value)
+    if len(data)>=window_size:
+        median_output = median_filter(data,window_size)
+        moving_average_output = moving_average_filter(data, window_size)
+        kalman_output = kalman_filter(data, process_variance, measurement_variance)
+        gaussian_output = gaussian_filter(data, window_size)
+        # Apply weights and blend the filtered outputs
+        blended_output = []
+        for i in range(len(data)):
+            blended_value = (moving_average_output[i] * average_weight + 
+                            median_output[i] * median_weight + 
+                            kalman_output[i] * kalman_weight + 
+                            gaussian_output[i] * gaussian_weight)
+            blended_output.append(blended_value)
     
-    return blended_output
+        return blended_output
+    else:
+        return data

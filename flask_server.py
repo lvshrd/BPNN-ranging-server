@@ -5,19 +5,32 @@ from BPmodel import MLP
 import filter
 import os
 import logging
-
 logging.basicConfig(filename='flask_server.log', level=logging.INFO)
 
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
+# 设置超时时间
+app.config['TIMEOUT'] = 60  # 设置超时时间为 60 秒
+
+# 处理客户端断开连接
+@app.after_request
+def after_request(response):
+    if request.endpoint == 'predict' and response.status_code == 200:
+        try:
+            response.direct_passthrough = False
+        except (IOError, AttributeError):
+            logging.error("Client disconnected before response could be sent.")
+    return response
+    
 
 # 初始化突变检测相关变量
 prev_rssi = {}
 prev_env = {}
 # 定义突变检测阈值
-mutation_threshold = 2  
-history_max_length = 200
+mutation_threshold = 15  
+history_max_length = 500
 mutation_detection_window = 10
+window_size = 21
 # 获取环境模型，默认使用model_env1
 env_model_index = 1 
 
@@ -41,6 +54,14 @@ for env in envs:
 # 检查加载的模型数量
 print(f"Total models loaded: {len(models)}")
 
+def curve_predict(device_name, rssi_value):
+    if prev_env[device_name] == 0:
+        distance = 10 ** ((-46.11375710739641 - rssi_value) / (10 * 3.7773717761249443))
+    else:
+        distance = 10 ** ((-41.29278313140723 - rssi_value) / (10 * 3.7674211157204023))
+    return distance
+
+
 # RSSI突变检测函数
 def detect_rssi_mutation(rssi):
     first_half_avg = np.mean(rssi[:mutation_detection_window // 2])
@@ -60,25 +81,38 @@ def process_data_and_predict(name, rssi):
         result['name'] = name
         # 清洗和滤波处理RSSI值
         cleaned_rssi = filter.clean_rssi_values(rssi)
-        filtered_rssi = filter.weighted_blend_filter(cleaned_rssi, window_size=100, process_variance=50, measurement_variance=500)
-
+        filtered_rssi = filter.weighted_blend_filter(cleaned_rssi, window_size=window_size, process_variance=1, measurement_variance=1000)
+    
         # 转换为数组并进行归一化处理
         rssi_array = np.array(filtered_rssi).reshape(-1,1)
-        normalized_rssi = (rssi_array - np.mean(rssi_array)) / np.std(rssi_array)
+        # scaler = StandardScaler()
+        # # 使用fit_transform()函数来同时计算平均值和标准差，并对数据进行标准化
+        # normalized_rssi = scaler.fit_transform(rssi_array)
+        normalized_rssi = (rssi_array - np.min(rssi_array)) / (np.max(rssi_array) - np.min(rssi_array))
         env_model = models.get(prev_env[name])
         
         if env_model is None:
             raise Exception("Model for environment 1 is not loaded.")
         # 使用模型预测距离值
-        rssi_tensor = torch.Tensor(normalized_rssi[-1]).unsqueeze(0).unsqueeze(2)
-        distance = env_model(rssi_tensor).item()
-        distance = distance * 2.7799370586850793 + 5.813296292748348
+        # rssi_tensor = torch.Tensor(normalized_rssi[-1]).unsqueeze(0).unsqueeze(2)
+        # distance = env_model(rssi_tensor).item()
+        # distance = distance * 4.69 + 5.5
 
-        print(f"{name} Predicted distance:{distance}")
+        # rssi_tensor = torch.tensor(normalized_rssi, dtype=torch.float32)
+        # distance_tensor = env_model(rssi_tensor)
+        # distance_tensor = distance_tensor * 4.69 + 5.5
+        # distance_numpy = distance_tensor.detach().numpy()
+        # distance = distance_numpy[-1]
+        rssi_tensor = torch.tensor(normalized_rssi, dtype=torch.float32)
+        distance_tensor = env_model(rssi_tensor)
+        distance_tensor = distance_tensor * 9 + 1
+        distance = distance_tensor[-1].item()  # 获取最新的预测距离值
 
-        if len(rssi) >= mutation_detection_window:
+        distance = curve_predict(name, filtered_rssi[-1])
+
+        if len(cleaned_rssi) >= mutation_detection_window:
             # 检查RSSI突变情况
-            mutation_detected = detect_rssi_mutation(rssi[-mutation_detection_window:])
+            mutation_detected = detect_rssi_mutation(cleaned_rssi[-mutation_detection_window:])
             if mutation_detected == 1:
                 # RSSI突变情况，根据情况选择不同的模型进行预测
                 prev_env[name] = 1
@@ -90,9 +124,10 @@ def process_data_and_predict(name, rssi):
         result['wallStatus'] = prev_env[name]
         result['distance'] = distance
         result['rssi'] = rssi[-1]
-
     except Exception as e:
         result['error'] = str(e)
+    logging.info(f"sent data: name={name}|rssi={rssi[-1]}|distance={distance}")
+    print(f"sent data: name={name}|rssi={rssi[-1]}|distance={distance}")
     return jsonify(result)
 
 @app.route('/')
@@ -126,9 +161,9 @@ def predict():
 
     # 处理数据并进行预测
     result = process_data_and_predict(name, prev_rssi[name])
-
-    logging.info(f"Sent data: {result}")
+    # print(f"Sent data: {result}")
+    # logging.info(f"Sent data: {result}")
     return result
 
 if __name__ == '__main__':
-    app.run(host='172.25.5.223', port=5000,debug=False)
+    app.run(host='172.16.24.230', port=5000,debug=False)
