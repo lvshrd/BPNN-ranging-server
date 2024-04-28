@@ -1,4 +1,4 @@
-# Improvement of Range Estimation Model for Presence Check System based on BP Neural Network
+# Ranging Model Improvement for Presence Check System based on BP Neural Network
 
 The system originally adopted a simple Shadowing model, where RSSI values were obtained by scanning surrounding devices through the mobile end. These values were then input into a simple coefficient pending equation to calculate the logarithmic loss formula of A (RSSI value at reference distance) and n (environmental factor), as detailed in relevant literature, to obtain distance values. 
 
@@ -6,7 +6,7 @@ Due to the questionable accuracy of this method, a decision was made to collect 
 
 ## Model Deployment
 
-Considering the real-time and convenience aspects of the ranging algorithm, the improved ranging model is deployed on a web end based on Flask server (lvshrd.pythonanywhere.com/predict). 
+Considering the real-time and convenience aspects of the ranging algorithm, the improved ranging model is deployed on a web end based on Flask server (https://lvshrd.pythonanywhere.com/predict), which is not avalible by visual check directly. You can check a simple web UI by clicking https://lvshrd.pythonanywhere.com/. This site will be disabled on Monday **15 July 2024** if I don't use it any longer after FYP CA2. :>
 
 This deployment is more efficient and secure compared to importing model files into an Android app and using corresponding APIs for prediction. This eliminates the need to rewrite RSSI data processing, filtering, and normalization in the app. Moreover, compared to local area network deployment, this deployment allows for 24/7 access from anywhere.
 
@@ -25,6 +25,7 @@ Compared to the fitted Shadowing model, the BP-based ranging model demonstrates 
 ### Datasets
 - `data_env_0`: Dataset for scenarios with wall obstruction.
 - `data_env_1`: Dataset for open indoor scenes.
+
    Each scene contains files numbered from 1 to 10, each file containing a fixed number of RSSI data points.
 
    Due to imperfect data collection functionality in the app, samples were collected roughly based on time, which may result in inconsistent frequency and quantity. Therefore, they all undergo sample quantity alignment in the `test` directory through the `dataNumber_align.py` script.
